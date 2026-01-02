@@ -1,1 +1,588 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
+local Window = Rayfield:CreateWindow({
+    Name = "Rivales ESP",
+    LoadingTitle = "Rivales Script",
+    LoadingSubtitle = "Loading...",
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = "RivalesHub",
+        FileName = "Config"
+    },
+    KeySystem = false
+})
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local ESPEnabled = false
+local ESPColor = Color3.fromRGB(255, 0, 0)
+local ESPObjects = {}
+
+local function CreateESP(player)
+    if ESPObjects[player] then return end
+    if player == LocalPlayer then return end
+    
+    local espHolder = {}
+    espHolder.Player = player
+    
+    local box = Drawing.new("Square")
+    box.Thickness = 1
+    box.Color = ESPColor
+    box.Filled = false
+    box.Visible = false
+    espHolder.Box = box
+    
+    local nameText = Drawing.new("Text")
+    nameText.Size = 14
+    nameText.Color = ESPColor
+    nameText.Center = true
+    nameText.Outline = true
+    nameText.OutlineColor = Color3.new(0, 0, 0)
+    nameText.Text = player.Name
+    nameText.Visible = false
+    espHolder.Name = nameText
+    
+    local distText = Drawing.new("Text")
+    distText.Size = 12
+    distText.Color = Color3.fromRGB(255, 255, 255)
+    distText.Center = true
+    distText.Outline = true
+    distText.OutlineColor = Color3.new(0, 0, 0)
+    distText.Text = "0m"
+    distText.Visible = false
+    espHolder.Distance = distText
+    
+    local tracer = Drawing.new("Line")
+    tracer.Thickness = 1
+    tracer.Color = ESPColor
+    tracer.Visible = false
+    espHolder.Tracer = tracer
+    
+    ESPObjects[player] = espHolder
+end
+
+local function RemoveESP(player)
+    local espHolder = ESPObjects[player]
+    if espHolder then
+        if espHolder.Box then espHolder.Box:Remove() end
+        if espHolder.Name then espHolder.Name:Remove() end
+        if espHolder.Distance then espHolder.Distance:Remove() end
+        if espHolder.Tracer then espHolder.Tracer:Remove() end
+        ESPObjects[player] = nil
+    end
+end
+
+local function ClearAllESP()
+    for player, _ in pairs(ESPObjects) do
+        RemoveESP(player)
+    end
+end
+
+local function RefreshESP()
+    ClearAllESP()
+    if ESPEnabled then
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                CreateESP(player)
+            end
+        end
+    end
+end
+
+local function GetCorners(cf, size)
+    local corners = {}
+    local halfSize = size / 2
+    local offsets = {
+        Vector3.new(-halfSize.X, halfSize.Y, 0),
+        Vector3.new(halfSize.X, halfSize.Y, 0),
+        Vector3.new(-halfSize.X, -halfSize.Y, 0),
+        Vector3.new(halfSize.X, -halfSize.Y, 0)
+    }
+    for _, offset in pairs(offsets) do
+        table.insert(corners, cf.Position + offset)
+    end
+    return corners
+end
+
+RunService.RenderStepped:Connect(function()
+    for player, espHolder in pairs(ESPObjects) do
+        if not ESPEnabled then
+            espHolder.Box.Visible = false
+            espHolder.Name.Visible = false
+            espHolder.Distance.Visible = false
+            espHolder.Tracer.Visible = false
+            continue
+        end
+        
+        local character = player.Character
+        if not character then
+            espHolder.Box.Visible = false
+            espHolder.Name.Visible = false
+            espHolder.Distance.Visible = false
+            espHolder.Tracer.Visible = false
+            continue
+        end
+        
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        local hrp = character:FindFirstChild("HumanoidRootPart")
+        if not humanoid or not hrp or humanoid.Health <= 0 then
+            espHolder.Box.Visible = false
+            espHolder.Name.Visible = false
+            espHolder.Distance.Visible = false
+            espHolder.Tracer.Visible = false
+            continue
+        end
+        
+        local screenPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
+        if not onScreen then
+            espHolder.Box.Visible = false
+            espHolder.Name.Visible = false
+            espHolder.Distance.Visible = false
+            espHolder.Tracer.Visible = false
+            continue
+        end
+        
+        local distance = 0
+        if LocalPlayer.Character then
+            local localHRP = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if localHRP then
+                distance = math.floor((localHRP.Position - hrp.Position).Magnitude)
+            end
+        end
+        
+        local scaleFactor = 1 / (screenPos.Z * math.tan(math.rad(Camera.FieldOfView / 2)) * 2) * 1000
+        local boxHeight = math.clamp(scaleFactor * 5, 20, 500)
+        local boxWidth = boxHeight * 0.6
+        
+        espHolder.Box.Size = Vector2.new(boxWidth, boxHeight)
+        espHolder.Box.Position = Vector2.new(screenPos.X - boxWidth / 2, screenPos.Y - boxHeight / 2)
+        espHolder.Box.Color = ESPColor
+        espHolder.Box.Visible = true
+        
+        espHolder.Name.Position = Vector2.new(screenPos.X, screenPos.Y - boxHeight / 2 - 16)
+        espHolder.Name.Color = ESPColor
+        espHolder.Name.Visible = true
+        
+        espHolder.Distance.Text = tostring(distance) .. "m"
+        espHolder.Distance.Position = Vector2.new(screenPos.X, screenPos.Y + boxHeight / 2 + 2)
+        espHolder.Distance.Visible = true
+        
+        espHolder.Tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
+        espHolder.Tracer.To = Vector2.new(screenPos.X, screenPos.Y + boxHeight / 2)
+        espHolder.Tracer.Color = ESPColor
+        espHolder.Tracer.Visible = true
+    end
+end)
+
+Players.PlayerAdded:Connect(function(player)
+    if ESPEnabled and player ~= LocalPlayer then
+        CreateESP(player)
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    RemoveESP(player)
+end)
+
+local ESPTab = Window:CreateTab("ESP", 4483362458)
+
+ESPTab:CreateSection("Player ESP (Undetectable)")
+
+ESPTab:CreateToggle({
+    Name = "Enable ESP",
+    CurrentValue = false,
+    Flag = "ESPToggle",
+    Callback = function(Value)
+        ESPEnabled = Value
+        if Value then
+            RefreshESP()
+        else
+            ClearAllESP()
+        end
+    end
+})
+
+ESPTab:CreateColorPicker({
+    Name = "ESP Color",
+    Color = Color3.fromRGB(255, 0, 0),
+    Flag = "ESPColorPicker",
+    Callback = function(Value)
+        ESPColor = Value
+    end
+})
+
+ESPTab:CreateButton({
+    Name = "Refresh ESP",
+    Callback = function()
+        RefreshESP()
+    end
+})
+
+-- ============================================
+-- LEGIT AIM ASSIST (Undetectable)
+-- ============================================
+
+local UserInputService = game:GetService("UserInputService")
+
+local AimAssistEnabled = false
+local AimFOV = 45
+local AimSmoothness = 0.08
+local AimReactionTime = 0.065
+local AimRandomness = 0.12
+local PredictionAmount = 0.06
+local TargetPart = "Head"
+local ShowFOV = false
+
+local IsAiming = false
+local LastAimTime = 0
+local CurrentTarget = nil
+local LastTargetPos = nil
+local TargetVelocity = Vector3.zero
+local FrameSkipChance = 0.15
+local SmoothingVariance = 0.05
+
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 1
+FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+FOVCircle.Filled = false
+FOVCircle.Transparency = 0.5
+FOVCircle.Visible = false
+
+local function GetScreenCenter()
+    return Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+end
+
+local function IsPlayerValid(player)
+    if not player or player == LocalPlayer then return false end
+    local char = player.Character
+    if not char then return false end
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    local target = char:FindFirstChild(TargetPart) or char:FindFirstChild("Head")
+    if not humanoid or not target then return false end
+    if humanoid.Health <= 0 then return false end
+    return true
+end
+
+local function GetClosestPlayer()
+    local closest = nil
+    local closestDist = AimFOV
+    local screenCenter = GetScreenCenter()
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if IsPlayerValid(player) then
+            local char = player.Character
+            local target = char:FindFirstChild(TargetPart) or char:FindFirstChild("Head")
+            if target then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(target.Position)
+                if onScreen then
+                    local dist = (Vector2.new(screenPos.X, screenPos.Y) - screenCenter).Magnitude
+                    if dist < closestDist then
+                        closestDist = dist
+                        closest = player
+                    end
+                end
+            end
+        end
+    end
+    
+    return closest, closestDist
+end
+
+local function ApplyHumanization(deltaX, deltaY)
+    local randX = (math.random() - 0.5) * AimRandomness * 2
+    local randY = (math.random() - 0.5) * AimRandomness * 2
+    
+    local smoothVariance = 1 + (math.random() - 0.5) * SmoothingVariance * 2
+    
+    return deltaX + randX, deltaY + randY, smoothVariance
+end
+
+local function CalculatePrediction(player)
+    local char = player.Character
+    if not char then return Vector3.zero end
+    
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return Vector3.zero end
+    
+    local currentPos = hrp.Position
+    
+    if LastTargetPos and CurrentTarget == player then
+        local newVelocity = (currentPos - LastTargetPos) * 60
+        TargetVelocity = TargetVelocity:Lerp(newVelocity, 0.3)
+    else
+        TargetVelocity = hrp.AssemblyLinearVelocity or Vector3.zero
+    end
+    
+    LastTargetPos = currentPos
+    CurrentTarget = player
+    
+    return TargetVelocity * PredictionAmount
+end
+
+local function ShouldSkipFrame()
+    return math.random() < FrameSkipChance
+end
+
+local function GetDistanceMultiplier(player)
+    if not LocalPlayer.Character then return 1 end
+    local localHRP = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local char = player.Character
+    if not localHRP or not char then return 1 end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return 1 end
+    
+    local distance = (localHRP.Position - hrp.Position).Magnitude
+    
+    if distance < 15 then
+        return 1.3
+    elseif distance < 35 then
+        return 1.1
+    elseif distance < 70 then
+        return 1.0
+    else
+        return 0.9
+    end
+end
+
+local function PerformAimAssist()
+    if not AimAssistEnabled or not IsAiming then return end
+    
+    if tick() - LastAimTime < AimReactionTime then return end
+    
+    if ShouldSkipFrame() then return end
+    
+    local player, dist = GetClosestPlayer()
+    if not player then
+        CurrentTarget = nil
+        LastTargetPos = nil
+        return
+    end
+    
+    local char = player.Character
+    local target = char:FindFirstChild(TargetPart) or char:FindFirstChild("Head")
+    if not target then return end
+    
+    local prediction = CalculatePrediction(player)
+    local targetPos = target.Position + prediction
+    
+    local screenPos, onScreen = Camera:WorldToViewportPoint(targetPos)
+    if not onScreen then return end
+    
+    local screenCenter = GetScreenCenter()
+    local deltaX = screenPos.X - screenCenter.X
+    local deltaY = screenPos.Y - screenCenter.Y
+    
+    local distanceToTarget = math.sqrt(deltaX * deltaX + deltaY * deltaY)
+    if distanceToTarget < 0.5 then return end
+    
+    local distMult = GetDistanceMultiplier(player)
+    local humanDeltaX, humanDeltaY, smoothVar = ApplyHumanization(deltaX, deltaY)
+    
+    local finalSmooth = AimSmoothness * smoothVar * distMult
+    finalSmooth = math.clamp(finalSmooth, 0.05, 0.4)
+    
+    local moveX = humanDeltaX * finalSmooth
+    local moveY = humanDeltaY * finalSmooth
+    
+    local maxMove = 15
+    moveX = math.clamp(moveX, -maxMove, maxMove)
+    moveY = math.clamp(moveY, -maxMove, maxMove)
+    
+    mousemoverel(moveX, moveY)
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        IsAiming = true
+        LastAimTime = tick()
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton2 then
+        IsAiming = false
+        CurrentTarget = nil
+        LastTargetPos = nil
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    FOVCircle.Position = GetScreenCenter()
+    FOVCircle.Radius = AimFOV
+    FOVCircle.Visible = ShowFOV and AimAssistEnabled
+    
+    PerformAimAssist()
+end)
+
+-- Aim Assist Tab
+local AimTab = Window:CreateTab("Aim Assist", 4483362458)
+
+AimTab:CreateSection("Legit Aim Assist (Undetectable)")
+
+AimTab:CreateToggle({
+    Name = "Enable Aim Assist",
+    CurrentValue = false,
+    Flag = "AimAssistToggle",
+    Callback = function(Value)
+        AimAssistEnabled = Value
+    end
+})
+
+AimTab:CreateToggle({
+    Name = "Show FOV Circle",
+    CurrentValue = false,
+    Flag = "ShowFOVToggle",
+    Callback = function(Value)
+        ShowFOV = Value
+        FOVCircle.Visible = Value and AimAssistEnabled
+    end
+})
+
+AimTab:CreateSlider({
+    Name = "FOV Size",
+    Range = {20, 120},
+    Increment = 5,
+    CurrentValue = 45,
+    Flag = "FOVSlider",
+    Callback = function(Value)
+        AimFOV = Value
+    end
+})
+
+AimTab:CreateSlider({
+    Name = "Smoothness",
+    Range = {0.03, 0.25},
+    Increment = 0.01,
+    CurrentValue = 0.08,
+    Flag = "SmoothnessSlider",
+    Callback = function(Value)
+        AimSmoothness = Value
+    end
+})
+
+AimTab:CreateSlider({
+    Name = "Prediction",
+    Range = {0, 0.2},
+    Increment = 0.01,
+    CurrentValue = 0.06,
+    Flag = "PredictionSlider",
+    Callback = function(Value)
+        PredictionAmount = Value
+    end
+})
+
+AimTab:CreateSlider({
+    Name = "Humanization",
+    Range = {0.05, 0.25},
+    Increment = 0.01,
+    CurrentValue = 0.12,
+    Flag = "RandomnessSlider",
+    Callback = function(Value)
+        AimRandomness = Value
+    end
+})
+
+AimTab:CreateSlider({
+    Name = "Reaction Time",
+    Range = {0.03, 0.12},
+    Increment = 0.005,
+    CurrentValue = 0.065,
+    Flag = "ReactionSlider",
+    Callback = function(Value)
+        AimReactionTime = Value
+    end
+})
+
+AimTab:CreateDropdown({
+    Name = "Target Part",
+    Options = {"Head", "HumanoidRootPart", "UpperTorso", "Torso"},
+    CurrentOption = {"Head"},
+    Flag = "TargetPartDropdown",
+    Callback = function(Option)
+        TargetPart = Option[1] or Option
+    end
+})
+
+-- ============================================
+-- SETTINGS TAB
+-- ============================================
+
+local AutoExecuteEnabled = false
+local ScriptSource = game:HttpGet("https://raw.githubusercontent.com/doggoman230/rivals/refs/heads/main/script")
+
+local function QueueScript()
+    local script = [[
+        loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+        -- Your script will re-execute here
+    ]]
+    
+    if syn and syn.queue_on_teleport then
+        syn.queue_on_teleport(script)
+    elseif queue_on_teleport then
+        queue_on_teleport(script)
+    elseif fluxus and fluxus.queue_on_teleport then
+        fluxus.queue_on_teleport(script)
+    elseif getgenv().queue_on_teleport then
+        getgenv().queue_on_teleport(script)
+    end
+end
+
+local function SetupAutoExecute()
+    if not AutoExecuteEnabled then return end
+    
+    local scriptToQueue = game:HttpGet(game:GetObjects("rbxassetid://0")[1] and "" or "") or [[
+loadstring(game:HttpGet(']] .. (getgenv().ScriptURL or "YOUR_RAW_SCRIPT_URL") .. [['))()
+]]
+    
+    if syn and syn.queue_on_teleport then
+        syn.queue_on_teleport(scriptToQueue)
+    elseif queue_on_teleport then
+        queue_on_teleport(scriptToQueue)
+    elseif fluxus and fluxus.queue_on_teleport then
+        fluxus.queue_on_teleport(scriptToQueue)
+    elseif getgenv().queue_on_teleport then
+        getgenv().queue_on_teleport(scriptToQueue)
+    end
+end
+
+local SettingsTab = Window:CreateTab("Settings", 4483345998)
+
+SettingsTab:CreateSection("Script Settings")
+
+SettingsTab:CreateToggle({
+    Name = "Auto Execute on Teleport",
+    CurrentValue = false,
+    Flag = "AutoExecuteToggle",
+    Callback = function(Value)
+        AutoExecuteEnabled = Value
+        if Value then
+            SetupAutoExecute()
+        end
+    end
+})
+
+SettingsTab:CreateInput({
+    Name = "Script URL (for auto-execute)",
+    PlaceholderText = "Paste your raw script URL here",
+    RemoveTextAfterFocusLost = false,
+    Flag = "ScriptURLInput",
+    Callback = function(Text)
+        getgenv().ScriptURL = Text
+        if AutoExecuteEnabled then
+            SetupAutoExecute()
+        end
+    end
+})
+
+SettingsTab:CreateButton({
+    Name = "Destroy UI",
+    Callback = function()
+        ClearAllESP()
+        if FOVCircle then FOVCircle:Remove() end
+        Rayfield:Destroy()
+    end
+})
